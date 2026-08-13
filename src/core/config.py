@@ -7,6 +7,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
     REDIS_URL: str
+    TARGET_SERVICE_URL: str = "https://httpbin.org"
 
     model_config = SettingsConfigDict(
         env_file=".env",
