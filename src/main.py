@@ -19,3 +19,16 @@ async def health_check():
         "status": "ok",
         "environment": settings.ENVIRONMENT,
     }
+
+
+from fastapi import FastAPI
+from src.middleware.rate_limit import RateLimitMiddleware
+
+app = FastAPI(title="API Gateway")
+
+# Register the rate limiting middleware (defaults to 100 requests/minute)
+app.add_middleware(RateLimitMiddleware, max_requests=100)
+
+@app.get("/")
+async def root():
+    return {"message": "API Gateway is running!"}
