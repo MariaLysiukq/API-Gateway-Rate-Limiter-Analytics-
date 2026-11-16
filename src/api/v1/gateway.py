@@ -1,5 +1,6 @@
 import time
-from fastapi import APIRouter, Request, Depends, HTTPException, Response, status, BackgroundTasks
+from fastapi import APIRouter, Request, Depends, Response, status, BackgroundTasks
+from fastapi.responses import JSONResponse
 import redis.asyncio as aioredis
 
 from src.db.redis import get_redis
@@ -44,10 +45,14 @@ async def proxy_endpoint(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             latency_ms=latency_ms,
         )
-        raise HTTPException(
+        # Return (not raise) so the background analytics task still runs.
+        return JSONResponse(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Rate limit exceeded. Allowed: {api_key.rate_limit} requests/min.",
+            content={
+                "detail": f"Rate limit exceeded. Allowed: {api_key.rate_limit} requests/min."
+            },
             headers={"Retry-After": "60"},
+            background=background_tasks,
         )
 
     status_code, headers, content = await proxy_service.forward_request(request, path)

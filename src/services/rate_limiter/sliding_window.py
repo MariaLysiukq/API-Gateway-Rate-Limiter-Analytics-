@@ -1,4 +1,5 @@
 import time
+import uuid
 from typing import Tuple
 import redis.asyncio as aioredis
 from src.services.rate_limiter.base import BaseRateLimiter
@@ -12,6 +13,7 @@ class RedisSlidingWindowRateLimiter(BaseRateLimiter):
     local now = tonumber(ARGV[1])
     local window = tonumber(ARGV[2])
     local limit = tonumber(ARGV[3])
+    local member = ARGV[4]
     
     local clear_before = now - window
     
@@ -22,8 +24,8 @@ class RedisSlidingWindowRateLimiter(BaseRateLimiter):
     local current_requests = redis.call('ZCARD', key)
     
     if current_requests < limit then
-        -- Add the current request (score = timestamp, member = timestamp)
-        redis.call('ZADD', key, now, now)
+        -- Add the current request (score = timestamp, member = unique id)
+        redis.call('ZADD', key, now, member)
         -- Update the key’s TTL so it doesn’t linger in memory indefinitely
         redis.call('EXPIRE', key, window)
         return {1, current_requests + 1}
@@ -46,7 +48,7 @@ class RedisSlidingWindowRateLimiter(BaseRateLimiter):
         # Calls Lua-script
         result = await self.script(
             keys=[redis_key],
-            args=[now, window_seconds, limit],
+            args=[now, window_seconds, limit, f"{now}-{uuid.uuid4().hex}"],
         )
 
         is_allowed = bool(result[0])
