@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     REDIS_URL: str
     TARGET_SERVICE_URL: str = "https://httpbin.org"
 
+    # Token for the /api/v1/admin endpoints. Admin API is disabled when empty.
+    ADMIN_TOKEN: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

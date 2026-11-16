@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from src.api.v1.admin import router as admin_router
 from src.api.v1.analytics import router as analytics_router
 from src.api.v1.gateway import router as gateway_router
 from src.core.config import settings
@@ -17,6 +18,7 @@ app.add_middleware(RateLimitMiddleware, max_requests=100)
 
 app.include_router(gateway_router, prefix="/api/v1", tags=["Gateway"])
 app.include_router(analytics_router, prefix="/api/v1", tags=["Analytics"])
+app.include_router(admin_router, prefix="/api/v1", tags=["Admin"])
 
 
 @app.get("/", tags=["Health"])

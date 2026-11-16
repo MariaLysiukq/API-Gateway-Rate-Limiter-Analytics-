@@ -10,6 +10,7 @@ An async API gateway built with FastAPI. It sits between clients and a backend s
 ## Features
 
 - **API key authentication:** clients send `X-API-Key`; only a SHA-256 hash of each key is stored in PostgreSQL.
+- **Admin API:** create, list and revoke API keys, protected by an admin token.
 - **Two rate limiting layers:**
   - **Per API key, sliding window:** a Redis sorted set updated by an atomic Lua script. Each key has its own `rate_limit` (requests per minute).
   - **Per client IP, fixed window:** a global middleware that allows 100 requests per minute per IP using Redis `INCR`. If Redis is unavailable, it fails open.
@@ -40,6 +41,7 @@ src/
 ├── db/             # SQLAlchemy models, async session, Redis client
 ├── middleware/     # global per-IP rate limiting
 ├── repositories/   # data access (repository pattern)
+├── schemas/        # Pydantic request/response models
 └── services/       # auth, proxy, analytics, rate limiter algorithms
 ```
 
@@ -57,23 +59,23 @@ docker compose exec app alembic upgrade head
 
 The API docs are available at http://localhost:8000/docs.
 
-### Create a user and an API key
+### Create an API key
 
-There is no admin endpoint yet, so create a key directly in the database. The gateway stores only the SHA-256 hash of the key:
+Set `ADMIN_TOKEN` in `.env` (the admin API is disabled while it is empty), then create a key. The owner is created automatically if the email is new:
 
 ```bash
-docker compose exec postgres psql -U gateway_user -d gateway_db -c "
-INSERT INTO users (id, email, is_active, created_at)
-VALUES ('11111111-1111-1111-1111-111111111111', 'demo@example.com', true, now());
-INSERT INTO api_keys (id, key_hash, name, rate_limit, is_active, created_at, user_id)
-VALUES (gen_random_uuid(), encode(sha256('my-secret-key'), 'hex'), 'demo', 5, true, now(),
-        '11111111-1111-1111-1111-111111111111');"
+curl -X POST http://localhost:8000/api/v1/admin/keys \
+  -H "X-Admin-Token: change-me" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "demo@example.com", "name": "demo", "rate_limit": 5}'
 ```
+
+The response contains the raw key in `api_key`. It is shown only once; the gateway stores only its SHA-256 hash.
 
 ### Send requests through the gateway
 
 ```bash
-curl -H "X-API-Key: my-secret-key" http://localhost:8000/api/v1/proxy/get
+curl -H "X-API-Key: <api_key from the response>" http://localhost:8000/api/v1/proxy/get
 ```
 
 With `rate_limit = 5`, the sixth request within a minute returns `429 Too Many Requests`.
@@ -89,10 +91,15 @@ Connect a WebSocket client to `ws://localhost:8000/api/v1/ws/analytics` to recei
 | `GET` | `/health` | Health check |
 | `ANY` | `/api/v1/proxy/{path}` | Authenticated, rate-limited proxy to `TARGET_SERVICE_URL` |
 | `WS` | `/api/v1/ws/analytics` | Live stream of request events |
+| `POST` | `/api/v1/admin/keys` | Create an API key (admin) |
+| `GET` | `/api/v1/admin/keys` | List API keys (admin) |
+| `DELETE` | `/api/v1/admin/keys/{id}` | Revoke an API key (admin) |
+
+Admin endpoints require the `X-Admin-Token` header.
 
 ## Running tests
 
-The tests use an in-memory Redis (`fakeredis`), so no running services are needed:
+The tests use an in-memory Redis (`fakeredis`) and SQLite, so no running services are needed:
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -102,7 +109,6 @@ pytest
 
 ## Possible improvements
 
-- Admin endpoints for creating and revoking API keys
 - Aggregated analytics endpoint built on `AnalyticsRepository.get_summary_stats`
 - Configurable IP limit through settings
 
